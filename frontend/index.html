@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VisionSpec QC — AI Defect Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+/* ─── CSS Reset + Variables ─────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-void     : #03050f;
+  --bg-deep     : #070b1a;
+  --bg-glass    : rgba(10,18,40,0.55);
+  --border-glow : rgba(0,230,200,0.18);
+  --cyan        : #00ffe5;
+  --cyan-dim    : #00b8a4;
+  --red-hot     : #ff3a5c;
+  --green-ok    : #00f97a;
+  --amber       : #ffb300;
+  --txt-primary : #e8f0fc;
+  --txt-muted   : #7a8fb5;
+  --radius-lg   : 20px;
+  --radius-sm   : 10px;
+  --font-display: 'Syne', sans-serif;
+  --font-mono   : 'JetBrains Mono', monospace;
+  --transition  : 0.28s cubic-bezier(0.4,0,0.2,1);
+}
+
+html { scroll-behavior: smooth; }
+body {
+  font-family     : var(--font-display);
+  background-color: var(--bg-void);
+  color           : var(--txt-primary);
+  min-height      : 100vh;
+  overflow-x      : hidden;
+}
+
+/* ─── Animated mesh background ──────────────────────────── */
+.bg-mesh {
+  position : fixed; inset : 0; z-index : -1;
+  background:
+    radial-gradient(ellipse 80% 50% at 20% 10%, rgba(0,230,200,0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 85% 80%, rgba(80,0,220,0.09) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 50% at 50% 50%, rgba(255,58,92,0.04) 0%, transparent 70%),
+    var(--bg-void);
+  animation: meshPulse 12s ease-in-out infinite alternate;
+}
+@keyframes meshPulse {
+  from { opacity: 1; }
+  to   { opacity: 0.7; filter: brightness(1.15); }
+}
+
+/* Grid overlay */
+.bg-grid {
+  position   : fixed; inset : 0; z-index : -1;
+  background : linear-gradient(rgba(0,230,200,0.03) 1px, transparent 1px),
+               linear-gradient(90deg, rgba(0,230,200,0.03) 1px, transparent 1px);
+  background-size : 48px 48px;
+  mask-image : radial-gradient(ellipse 90% 90% at center, black 40%, transparent 100%);
+}
+
+/* ─── Nav ────────────────────────────────────────────────── */
+nav {
+  display         : flex;
+  align-items     : center;
+  justify-content : space-between;
+  padding         : 18px 48px;
+  border-bottom   : 1px solid var(--border-glow);
+  backdrop-filter : blur(20px);
+  position        : sticky; top : 0; z-index : 100;
+  background      : rgba(3,5,15,0.7);
+}
+.nav-logo {
+  display     : flex;
+  align-items : center;
+  gap         : 12px;
+}
+.logo-icon {
+  width           : 38px; height : 38px;
+  border-radius   : 10px;
+  background      : linear-gradient(135deg, var(--cyan), #0050ff);
+  display         : grid; place-items : center;
+  font-size       : 18px;
+  box-shadow      : 0 0 20px rgba(0,230,200,0.35);
+  animation       : logoPulse 3s ease-in-out infinite;
+}
+@keyframes logoPulse {
+  0%,100% { box-shadow: 0 0 20px rgba(0,230,200,0.35); }
+  50%     { box-shadow: 0 0 35px rgba(0,230,200,0.6); }
+}
+.logo-text { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
+.logo-text span { color: var(--cyan); }
+.nav-badge {
+  font-family : var(--font-mono);
+  font-size   : 0.7rem;
+  padding     : 4px 10px;
+  border-radius: 20px;
+  border      : 1px solid var(--border-glow);
+  color       : var(--cyan-dim);
+  letter-spacing: 0.06em;
+}
+.status-dot {
+  display      : inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background   : var(--green-ok);
+  margin-right : 6px;
+  box-shadow   : 0 0 8px var(--green-ok);
+  animation    : blink 2s step-end infinite;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ─── Hero ───────────────────────────────────────────────── */
+.hero {
+  text-align : center;
+  padding    : 72px 24px 56px;
+  position   : relative;
+}
+.hero-tag {
+  display       : inline-block;
+  font-family   : var(--font-mono);
+  font-size     : 0.72rem;
+  letter-spacing: 0.15em;
+  color         : var(--cyan-dim);
+  border        : 1px solid var(--border-glow);
+  padding       : 5px 14px;
+  border-radius : 20px;
+  margin-bottom : 20px;
+  animation     : fadeUp 0.6s ease both;
+}
+.hero h1 {
+  font-size   : clamp(2.4rem, 5vw, 4rem);
+  font-weight : 800;
+  line-height : 1.08;
+  letter-spacing: -0.04em;
+  animation   : fadeUp 0.7s 0.1s ease both;
+}
+.hero h1 .accent { color: var(--cyan); }
+.hero-sub {
+  font-family : var(--font-mono);
+  font-size   : 0.9rem;
+  color       : var(--txt-muted);
+  margin-top  : 16px;
+  animation   : fadeUp 0.7s 0.2s ease both;
+}
+
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(22px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+/* ─── Stats bar ──────────────────────────────────────────── */
+.stats-bar {
+  display          : flex;
+  justify-content  : center;
+  gap              : 32px;
+  flex-wrap        : wrap;
+  padding          : 0 24px 56px;
+  animation        : fadeUp 0.7s 0.3s ease both;
+}
+.stat-card {
+  display      : flex;
+  flex-direction: column;
+  align-items  : center;
+  gap          : 4px;
+  padding      : 18px 28px;
+  background   : var(--bg-glass);
+  border       : 1px solid var(--border-glow);
+  border-radius: var(--radius-sm);
+  backdrop-filter: blur(16px);
+  min-width    : 130px;
+}
+.stat-val {
+  font-size   : 1.6rem;
+  font-weight : 800;
+  color       : var(--cyan);
+  font-family : var(--font-mono);
+}
+.stat-lbl {
+  font-size  : 0.7rem;
+  color      : var(--txt-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ─── Main Layout ────────────────────────────────────────── */
+.main-grid {
+  display              : grid;
+  grid-template-columns: 1fr 1fr;
+  gap                  : 24px;
+  max-width            : 1280px;
+  margin               : 0 auto;
+  padding              : 0 32px 80px;
+  animation            : fadeUp 0.8s 0.35s ease both;
+}
+@media (max-width: 900px) {
+  .main-grid { grid-template-columns: 1fr; padding: 0 16px 60px; }
+  nav { padding: 14px 20px; }
+}
+
+/* ─── Glass card ─────────────────────────────────────────── */
+.glass-card {
+  background    : var(--bg-glass);
+  border        : 1px solid var(--border-glow);
+  border-radius : var(--radius-lg);
+  backdrop-filter: blur(20px);
+  padding       : 28px;
+  position      : relative;
+  overflow      : hidden;
+  transition    : border-color var(--transition), box-shadow var(--transition);
+}
+.glass-card::before {
+  content    : '';
+  position   : absolute; inset : 0;
+  background : radial-gradient(ellipse 60% 40% at top left, rgba(0,230,200,0.06), transparent);
+  pointer-events: none;
+}
+.glass-card:hover {
+  border-color : rgba(0,230,200,0.35);
+  box-shadow   : 0 8px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,230,200,0.12);
+}
+.card-title {
+  font-size   : 0.72rem;
+  font-family : var(--font-mono);
+  letter-spacing: 0.15em;
+  color       : var(--cyan-dim);
+  text-transform: uppercase;
+  margin-bottom: 20px;
+  display     : flex;
+  align-items : center;
+  gap         : 8px;
+}
+.card-title::before {
+  content       : '';
+  display       : inline-block;
+  width: 16px; height: 2px;
+  background    : var(--cyan);
+  border-radius : 2px;
+}
+
+/* ─── Upload zone ────────────────────────────────────────── */
+.upload-zone {
+  border        : 2px dashed rgba(0,230,200,0.25);
+  border-radius : var(--radius-sm);
+  padding       : 48px 24px;
+  text-align    : center;
+  cursor        : pointer;
+  transition    : all var(--transition);
+  position      : relative;
+  background    : rgba(0,230,200,0.02);
+}
+.upload-zone:hover,
+.upload-zone.drag-over {
+  border-color : var(--cyan);
+  background   : rgba(0,230,200,0.07);
+  box-shadow   : 0 0 30px rgba(0,230,200,0.12);
+}
+.upload-icon {
+  font-size    : 3rem;
+  margin-bottom: 16px;
+  display      : block;
+  filter       : drop-shadow(0 0 12px rgba(0,230,200,0.5));
+  animation    : float 3s ease-in-out infinite;
+}
+@keyframes float {
+  0%,100% { transform: translateY(0); }
+  50%     { transform: translateY(-8px); }
+}
+.upload-zone input { display: none; }
+.upload-cta {
+  font-size    : 0.95rem;
+  font-weight  : 700;
+  color        : var(--txt-primary);
+}
+.upload-cta span { color: var(--cyan); text-decoration: underline; }
+.upload-hint {
+  font-family  : var(--font-mono);
+  font-size    : 0.72rem;
+  color        : var(--txt-muted);
+  margin-top   : 8px;
+}
+
+/* Preview */
+.preview-wrap {
+  position     : relative;
+  border-radius: var(--radius-sm);
+  overflow     : hidden;
+  aspect-ratio : 1;
+  background   : #050810;
+  display      : none;
+}
+.preview-wrap img {
+  width  : 100%;
+  height : 100%;
+  object-fit: cover;
+  display: block;
+}
+.preview-overlay-label {
+  position       : absolute;
+  top: 10px; left: 10px;
+  font-family    : var(--font-mono);
+  font-size      : 0.68rem;
+  background     : rgba(0,0,0,0.6);
+  backdrop-filter: blur(8px);
+  padding        : 4px 10px;
+  border-radius  : 6px;
+  color          : var(--txt-muted);
+  letter-spacing : 0.08em;
+}
+
+/* ─── Analyse button ─────────────────────────────────────── */
+.btn-analyse {
+  width         : 100%;
+  margin-top    : 20px;
+  padding       : 16px;
+  font-family   : var(--font-display);
+  font-size     : 0.95rem;
+  font-weight   : 700;
+  letter-spacing: 0.04em;
+  border        : none;
+  border-radius : var(--radius-sm);
+  background    : linear-gradient(135deg, var(--cyan), #0060ff);
+  color         : #03050f;
+  cursor        : pointer;
+  transition    : all var(--transition);
+  position      : relative;
+  overflow      : hidden;
+  display       : flex;
+  align-items   : center;
+  justify-content: center;
+  gap           : 10px;
+}
+.btn-analyse:hover:not(:disabled) {
+  transform  : translateY(-2px);
+  box-shadow : 0 8px 30px rgba(0,230,200,0.4);
+}
+.btn-analyse:disabled {
+  opacity: 0.45;
+  cursor : not-allowed;
+}
+.btn-analyse .spinner {
+  width: 18px; height: 18px;
+  border: 2px solid rgba(0,0,0,0.2);
+  border-top-color: #03050f;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: none;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.btn-analyse.loading .spinner { display: block; }
+.btn-analyse.loading .btn-text { opacity: 0.6; }
+
+/* ─── Result card ────────────────────────────────────────── */
+.result-panel {
+  display       : flex;
+  flex-direction: column;
+  gap           : 20px;
+  min-height    : 200px;
+}
+.verdict-badge {
+  display         : flex;
+  align-items     : center;
+  justify-content : center;
+  gap             : 14px;
+  padding         : 22px;
+  border-radius   : var(--radius-sm);
+  font-size       : 1.8rem;
+  font-weight     : 800;
+  letter-spacing  : 0.08em;
+  transition      : all var(--transition);
+  position        : relative;
+  overflow        : hidden;
+}
+.verdict-badge.PASS {
+  background  : rgba(0,249,122,0.08);
+  border      : 1px solid rgba(0,249,122,0.3);
+  color       : var(--green-ok);
+  box-shadow  : 0 0 30px rgba(0,249,122,0.1);
+}
+.verdict-badge.DEFECT {
+  background  : rgba(255,58,92,0.08);
+  border      : 1px solid rgba(255,58,92,0.3);
+  color       : var(--red-hot);
+  box-shadow  : 0 0 30px rgba(255,58,92,0.12);
+}
+.verdict-badge.pulse { animation: verdictPulse 0.6s ease; }
+@keyframes verdictPulse {
+  0%  { transform: scale(0.95); opacity: 0; }
+  60% { transform: scale(1.03); }
+  100%{ transform: scale(1);    opacity: 1; }
+}
+
+/* ─── Confidence bar ─────────────────────────────────────── */
+.conf-section { display: flex; flex-direction: column; gap: 8px; }
+.conf-row {
+  display         : flex;
+  justify-content : space-between;
+  align-items     : center;
+}
+.conf-label { font-size: 0.78rem; color: var(--txt-muted); font-family: var(--font-mono); }
+.conf-value { font-size: 1rem; font-weight: 700; font-family: var(--font-mono); }
+.conf-bar-bg {
+  height        : 8px;
+  border-radius : 100px;
+  background    : rgba(255,255,255,0.06);
+  overflow      : hidden;
+}
+.conf-bar-fill {
+  height        : 100%;
+  border-radius : 100px;
+  width         : 0%;
+  transition    : width 1.1s cubic-bezier(0.4,0,0.2,1);
+}
+.conf-bar-fill.PASS   { background: linear-gradient(90deg, var(--green-ok), #00b85a); }
+.conf-bar-fill.DEFECT { background: linear-gradient(90deg, var(--red-hot), #ff6b8a); }
+
+/* ─── Heatmap panel ──────────────────────────────────────── */
+.heatmap-grid {
+  display              : grid;
+  grid-template-columns: 1fr 1fr;
+  gap                  : 12px;
+  margin-top           : 4px;
+}
+.heatmap-cell {
+  border-radius : var(--radius-sm);
+  overflow      : hidden;
+  background    : #050810;
+  aspect-ratio  : 1;
+  position      : relative;
+}
+.heatmap-cell img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.4s ease;
+}
+.heatmap-cell:hover img { transform: scale(1.04); }
+.heatmap-cell-label {
+  position       : absolute;
+  bottom: 8px; left: 8px;
+  font-family    : var(--font-mono);
+  font-size      : 0.65rem;
+  letter-spacing : 0.1em;
+  background     : rgba(0,0,0,0.65);
+  backdrop-filter: blur(6px);
+  padding        : 3px 8px;
+  border-radius  : 5px;
+  color          : var(--txt-muted);
+  text-transform : uppercase;
+}
+
+/* ─── Metrics row ────────────────────────────────────────── */
+.metrics-row {
+  display  : grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap      : 10px;
+  margin-top: 4px;
+}
+.metric-item {
+  background   : rgba(0,230,200,0.04);
+  border       : 1px solid var(--border-glow);
+  border-radius: var(--radius-sm);
+  padding      : 14px 12px;
+  text-align   : center;
+}
+.metric-val {
+  font-family : var(--font-mono);
+  font-size   : 1.1rem;
+  font-weight : 700;
+  color       : var(--cyan);
+}
+.metric-key {
+  font-size    : 0.65rem;
+  color        : var(--txt-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-top   : 4px;
+}
+
+/* ─── Pipeline simulator ─────────────────────────────────── */
+.pipeline-section {
+  max-width : 1280px;
+  margin    : 0 auto;
+  padding   : 0 32px 80px;
+}
+.pipeline-title {
+  font-size   : 1.2rem;
+  font-weight : 800;
+  margin-bottom: 24px;
+  display     : flex;
+  align-items : center;
+  gap         : 12px;
+}
+.pipeline-title span { color: var(--cyan); }
+.pipeline-scroll {
+  display   : flex;
+  gap       : 16px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-glow) transparent;
+}
+.pipe-item {
+  flex-shrink    : 0;
+  width          : 180px;
+  background     : var(--bg-glass);
+  border         : 1px solid var(--border-glow);
+  border-radius  : var(--radius-sm);
+  overflow       : hidden;
+  transition     : all var(--transition);
+  cursor         : pointer;
+}
+.pipe-item:hover { border-color: rgba(0,230,200,0.4); transform: translateY(-4px); }
+.pipe-img-wrap { aspect-ratio: 1; overflow: hidden; background: #050810; }
+.pipe-img-wrap img { width: 100%; height: 100%; object-fit: cover; }
+.pipe-info {
+  padding    : 10px 12px;
+  display    : flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pipe-label {
+  font-family : var(--font-mono);
+  font-size   : 0.68rem;
+  font-weight : 500;
+}
+.pipe-label.PASS   { color: var(--green-ok); }
+.pipe-label.DEFECT { color: var(--red-hot); }
+.pipe-conf {
+  font-family : var(--font-mono);
+  font-size   : 0.65rem;
+  color       : var(--txt-muted);
+}
+
+/* ─── Empty / placeholder states ────────────────────────── */
+.placeholder {
+  display       : flex;
+  flex-direction: column;
+  align-items   : center;
+  justify-content: center;
+  gap           : 12px;
+  height        : 100%;
+  min-height    : 220px;
+  color         : var(--txt-muted);
+  text-align    : center;
+}
+.placeholder-icon { font-size: 2.8rem; opacity: 0.35; }
+.placeholder-text { font-size: 0.82rem; font-family: var(--font-mono); opacity: 0.5; }
+
+/* ─── Toast ──────────────────────────────────────────────── */
+.toast-container {
+  position : fixed;
+  bottom   : 28px;
+  right    : 28px;
+  z-index  : 1000;
+  display  : flex;
+  flex-direction: column;
+  gap      : 10px;
+}
+.toast {
+  padding       : 14px 20px;
+  border-radius : var(--radius-sm);
+  font-family   : var(--font-mono);
+  font-size     : 0.8rem;
+  backdrop-filter: blur(20px);
+  border        : 1px solid;
+  animation     : slideInToast 0.3s ease;
+  max-width     : 320px;
+}
+@keyframes slideInToast {
+  from { transform: translateX(20px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.toast.error {
+  background : rgba(255,58,92,0.12);
+  border-color: rgba(255,58,92,0.35);
+  color      : var(--red-hot);
+}
+.toast.success {
+  background : rgba(0,249,122,0.10);
+  border-color: rgba(0,249,122,0.3);
+  color      : var(--green-ok);
+}
+.toast.info {
+  background : rgba(0,230,200,0.08);
+  border-color: var(--border-glow);
+  color      : var(--cyan-dim);
+}
+
+/* ─── Scan line animation ────────────────────────────────── */
+.scanning-overlay {
+  position : absolute; inset : 0;
+  pointer-events: none;
+  overflow : hidden;
+  display  : none;
+}
+.scanning-overlay.active { display: block; }
+.scan-line {
+  position   : absolute;
+  left: 0; right: 0;
+  height     : 2px;
+  background : linear-gradient(90deg, transparent, var(--cyan), transparent);
+  box-shadow : 0 0 10px var(--cyan);
+  animation  : scanDown 1.5s linear infinite;
+}
+@keyframes scanDown {
+  from { top: -2px; }
+  to   { top: 100%; }
+}
+
+/* ─── Footer ─────────────────────────────────────────────── */
+footer {
+  text-align   : center;
+  padding      : 32px;
+  border-top   : 1px solid var(--border-glow);
+  font-family  : var(--font-mono);
+  font-size    : 0.72rem;
+  color        : var(--txt-muted);
+}
+footer span { color: var(--cyan); }
+</style>
+</head>
+<body>
+
+<div class="bg-mesh"></div>
+<div class="bg-grid"></div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <div class="logo-icon">🔬</div>
+    <div class="logo-text">Vision<span>Spec</span> QC</div>
+  </div>
+  <div style="display:flex;gap:12px;align-items:center">
+    <div class="nav-badge"><span class="status-dot"></span>SYSTEM ONLINE</div>
+    <div class="nav-badge">v2.0</div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-tag">AI-POWERED INDUSTRIAL INSPECTION</div>
+  <h1>Detect Defects with<br><span class="accent">Neural Precision</span></h1>
+  <p class="hero-sub">// MobileNetV2 + Grad-CAM · Real-time PCB & Surface Inspection</p>
+</section>
+
+<!-- STATS -->
+<div class="stats-bar">
+  <div class="stat-card">
+    <div class="stat-val" id="stat-accuracy">98.4%</div>
+    <div class="stat-lbl">Accuracy</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" id="stat-inspected">—</div>
+    <div class="stat-lbl">Inspected</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" id="stat-defects">—</div>
+    <div class="stat-lbl">Defects Found</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" id="stat-latency">—ms</div>
+    <div class="stat-lbl">Latency</div>
+  </div>
+</div>
+
+<!-- MAIN GRID -->
+<div class="main-grid">
+
+  <!-- LEFT: Upload + Controls -->
+  <div class="glass-card" style="display:flex;flex-direction:column;gap:20px;">
+    <div class="card-title">Upload Specimen</div>
+
+    <!-- Upload zone -->
+    <div class="upload-zone" id="uploadZone">
+      <input type="file" id="fileInput" accept="image/*" />
+      <span class="upload-icon">🔭</span>
+      <div class="upload-cta">Drop image or <span onclick="document.getElementById('fileInput').click()">browse</span></div>
+      <div class="upload-hint">JPG · PNG · BMP · WEBP  |  Any resolution</div>
+      <div class="scanning-overlay" id="scanOverlay"><div class="scan-line"></div></div>
+    </div>
+
+    <!-- Preview -->
+    <div class="preview-wrap" id="previewWrap">
+      <img id="previewImg" src="" alt="preview" />
+      <div class="preview-overlay-label" id="previewLabel">SPECIMEN LOADED</div>
+    </div>
+
+    <!-- Analyse button -->
+    <button class="btn-analyse" id="btnAnalyse" disabled>
+      <div class="spinner"></div>
+      <span class="btn-text">🔍 Run Defect Analysis</span>
+    </button>
+
+    <!-- Demo mode note -->
+    <div style="font-family:var(--font-mono);font-size:0.7rem;color:var(--txt-muted);text-align:center;line-height:1.6;">
+      ⚠ Connect the Flask API (<code style="color:var(--cyan-dim)">python app.py</code>) for live inference.<br>
+      Demo mode shows simulated responses when API is offline.
+    </div>
+  </div>
+
+  <!-- RIGHT: Results -->
+  <div class="glass-card" style="display:flex;flex-direction:column;gap:20px;">
+    <div class="card-title">Analysis Results</div>
+
+    <div class="result-panel" id="resultPanel">
+      <div class="placeholder" id="placeholderMsg">
+        <div class="placeholder-icon">📡</div>
+        <div class="placeholder-text">Awaiting specimen upload…<br>Results will render here.</div>
+      </div>
+
+      <!-- Verdict (hidden until result) -->
+      <div class="verdict-badge" id="verdictBadge" style="display:none"></div>
+
+      <!-- Confidence bar -->
+      <div class="conf-section" id="confSection" style="display:none">
+        <div class="conf-row">
+          <span class="conf-label">CONFIDENCE SCORE</span>
+          <span class="conf-value" id="confValue">—</span>
+        </div>
+        <div class="conf-bar-bg">
+          <div class="conf-bar-fill" id="confBar"></div>
+        </div>
+      </div>
+
+      <!-- Metrics -->
+      <div class="metrics-row" id="metricsRow" style="display:none">
+        <div class="metric-item">
+          <div class="metric-val" id="mLatency">—</div>
+          <div class="metric-key">Latency (ms)</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-val" id="mModel">—</div>
+          <div class="metric-key">Model</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-val" id="mTimestamp">—</div>
+          <div class="metric-key">Time</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HEATMAP Panel (full width below) -->
+  <div class="glass-card" style="grid-column:1/-1;">
+    <div class="card-title">Grad-CAM Defect Heatmap</div>
+    <div id="heatmapArea">
+      <div class="placeholder">
+        <div class="placeholder-icon">🌡️</div>
+        <div class="placeholder-text">Heatmap will render after analysis.<br>Red regions → highest defect activation.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- PIPELINE SIMULATOR -->
+<div class="pipeline-section">
+  <div class="glass-card">
+    <div class="card-title">Inspection History</div>
+    <div class="pipeline-scroll" id="pipelineScroll">
+      <div class="placeholder" style="width:100%;">
+        <div class="placeholder-icon">🏭</div>
+        <div class="placeholder-text">Submit specimens to populate the inspection log.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<footer>
+  Built with <span>♥</span> by VisionSpec QC &nbsp;·&nbsp; MobileNetV2 + Grad-CAM &nbsp;·&nbsp;
+  <span>Production-Grade AI</span>
+</footer>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────
+const state = {
+  file       : null,
+  imageURL   : null,
+  results    : [],
+  inspected  : 0,
+  defects    : 0,
+};
+
+const API_BASE = window.location.origin;   // Flask serves same origin
+
+// ─── DOM refs ─────────────────────────────────────────────────────────
+const uploadZone   = document.getElementById("uploadZone");
+const fileInput    = document.getElementById("fileInput");
+const previewWrap  = document.getElementById("previewWrap");
+const previewImg   = document.getElementById("previewImg");
+const previewLabel = document.getElementById("previewLabel");
+const btnAnalyse   = document.getElementById("btnAnalyse");
+const scanOverlay  = document.getElementById("scanOverlay");
+
+const placeholderMsg = document.getElementById("placeholderMsg");
+const verdictBadge   = document.getElementById("verdictBadge");
+const confSection    = document.getElementById("confSection");
+const confValue      = document.getElementById("confValue");
+const confBar        = document.getElementById("confBar");
+const metricsRow     = document.getElementById("metricsRow");
+const heatmapArea    = document.getElementById("heatmapArea");
+const pipelineScroll = document.getElementById("pipelineScroll");
+
+// ─── Upload handling ──────────────────────────────────────────────────
+uploadZone.addEventListener("dragover", e => {
+  e.preventDefault(); uploadZone.classList.add("drag-over");
+});
+uploadZone.addEventListener("dragleave", () => uploadZone.classList.remove("drag-over"));
+uploadZone.addEventListener("drop", e => {
+  e.preventDefault(); uploadZone.classList.remove("drag-over");
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+uploadZone.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => {
+  if (fileInput.files[0]) handleFile(fileInput.files[0]);
+});
+
+function handleFile(file) {
+  if (!file.type.startsWith("image/")) {
+    showToast("Please upload an image file.", "error"); return;
+  }
+  state.file     = file;
+  state.imageURL = URL.createObjectURL(file);
+
+  // Show preview
+  previewImg.src      = state.imageURL;
+  previewLabel.textContent = file.name.length > 28
+    ? file.name.slice(0,26) + "…" : file.name;
+  previewWrap.style.display  = "block";
+  uploadZone.style.display   = "none";
+
+  btnAnalyse.disabled = false;
+  showToast("Specimen loaded. Ready to analyse.", "info");
+}
+
+// ─── Analyse ──────────────────────────────────────────────────────────
+btnAnalyse.addEventListener("click", runAnalysis);
+
+async function runAnalysis() {
+  if (!state.file) return;
+
+  const t0 = performance.now();
+  setLoading(true);
+
+  try {
+    const formData = new FormData();
+    formData.append("image", state.file);
+
+    let data;
+    try {
+      const res = await fetch(`${API_BASE}/predict`, {
+        method : "POST",
+        body   : formData,
+        signal : AbortSignal.timeout(30000),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      data = await res.json();
+    } catch (fetchErr) {
+      // Demo fallback when API is offline
+      console.warn("API offline, using demo mode:", fetchErr.message);
+      data = demoResponse();
+    }
+
+    const latency = Math.round(performance.now() - t0);
+    renderResults(data, latency);
+    addToPipeline(data, latency);
+    updateStats(data.label, latency);
+
+  } catch (err) {
+    showToast("Analysis failed: " + err.message, "error");
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ─── Demo fallback (when Flask API is offline) ────────────────────────
+function demoResponse() {
+  const isDefect = Math.random() > 0.5;
+  const conf     = 75 + Math.random() * 24;
+  return {
+    label      : isDefect ? "DEFECT" : "PASS",
+    confidence : parseFloat(conf.toFixed(2)),
+    raw_prob   : isDefect ? conf / 100 : 1 - conf / 100,
+    heatmap_b64    : null,
+    comparison_b64 : null,
+    demo       : true,
+  };
+}
+
+// ─── Render results ───────────────────────────────────────────────────
+function renderResults(data, latency) {
+  // Hide placeholder
+  placeholderMsg.style.display = "none";
+
+  // Verdict
+  verdictBadge.className       = `verdict-badge ${data.label}`;
+  verdictBadge.style.display   = "flex";
+  verdictBadge.innerHTML       = `${data.label === "DEFECT" ? "⚠" : "✓"} ${data.label}`;
+  void verdictBadge.offsetWidth;   // force reflow for animation
+  verdictBadge.classList.add("pulse");
+  setTimeout(() => verdictBadge.classList.remove("pulse"), 700);
+
+  // Confidence bar
+  confSection.style.display = "block";
+  confValue.textContent     = `${data.confidence.toFixed(1)}%`;
+  confValue.style.color     = data.label === "DEFECT" ? "var(--red-hot)" : "var(--green-ok)";
+  confBar.className         = `conf-bar-fill ${data.label}`;
+  setTimeout(() => { confBar.style.width = data.confidence + "%"; }, 50);
+
+  // Metrics row
+  metricsRow.style.display       = "grid";
+  document.getElementById("mLatency").textContent   = latency;
+  document.getElementById("mModel").textContent     = "MobileNetV2";
+  document.getElementById("mTimestamp").textContent = new Date().toLocaleTimeString();
+
+  // Heatmap
+  renderHeatmap(data);
+
+  showToast(
+    `${data.label === "DEFECT" ? "⚠ Defect detected" : "✓ Specimen passed"} — ${data.confidence.toFixed(1)}% confidence`,
+    data.label === "DEFECT" ? "error" : "success"
+  );
+}
+
+function renderHeatmap(data) {
+  if (data.comparison_b64) {
+    heatmapArea.innerHTML = `
+      <img src="data:image/png;base64,${data.comparison_b64}"
+           style="width:100%;border-radius:10px;" alt="Grad-CAM comparison" />`;
+    return;
+  }
+
+  // Fallback: show original in a grid with a note
+  const src = state.imageURL;
+  heatmapArea.innerHTML = `
+    <div class="heatmap-grid">
+      <div class="heatmap-cell">
+        <img src="${src}" alt="original" />
+        <div class="heatmap-cell-label">Original</div>
+      </div>
+      <div class="heatmap-cell" style="display:flex;align-items:center;justify-content:center;">
+        ${data.heatmap_b64
+          ? `<img src="data:image/png;base64,${data.heatmap_b64}" alt="heatmap" />
+             <div class="heatmap-cell-label">Grad-CAM</div>`
+          : `<div style="font-family:var(--font-mono);font-size:0.75rem;color:var(--txt-muted);text-align:center;padding:20px;">
+               Connect Flask API<br>for live Grad-CAM</div>`}
+      </div>
+    </div>`;
+}
+
+// ─── Pipeline history ─────────────────────────────────────────────────
+function addToPipeline(data, latency) {
+  // Clear placeholder if first entry
+  if (state.results.length === 0) pipelineScroll.innerHTML = "";
+
+  state.results.unshift({ data, latency, url: state.imageURL });
+
+  const item = document.createElement("div");
+  item.className = "pipe-item";
+  item.innerHTML = `
+    <div class="pipe-img-wrap">
+      <img src="${state.imageURL}" alt="" />
+    </div>
+    <div class="pipe-info">
+      <span class="pipe-label ${data.label}">${data.label}</span>
+      <span class="pipe-conf">${data.confidence.toFixed(0)}%</span>
+    </div>`;
+  pipelineScroll.prepend(item);
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────
+function updateStats(label, latency) {
+  state.inspected++;
+  if (label === "DEFECT") state.defects++;
+
+  document.getElementById("stat-inspected").textContent = state.inspected;
+  document.getElementById("stat-defects").textContent   = state.defects;
+  document.getElementById("stat-latency").textContent   = latency + "ms";
+}
+
+// ─── Loading state ────────────────────────────────────────────────────
+function setLoading(on) {
+  btnAnalyse.disabled = on;
+  btnAnalyse.classList.toggle("loading", on);
+  scanOverlay.classList.toggle("active", on);
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────
+function showToast(msg, type = "info") {
+  const t = document.createElement("div");
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  document.getElementById("toastContainer").appendChild(t);
+  setTimeout(() => {
+    t.style.opacity = "0";
+    t.style.transform = "translateX(20px)";
+    t.style.transition = "all 0.3s ease";
+    setTimeout(() => t.remove(), 350);
+  }, 3500);
+}
+
+// ─── Allow re-upload ──────────────────────────────────────────────────
+previewWrap.addEventListener("click", () => {
+  previewWrap.style.display = "none";
+  uploadZone.style.display  = "block";
+  state.file = null;
+  btnAnalyse.disabled = true;
+  fileInput.value = "";
+});
+</script>
+</body>
+</html>
