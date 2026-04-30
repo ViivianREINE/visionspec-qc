@@ -1,7 +1,8 @@
 services:
   - type: web
-    name: visionspec-qc-backend
+    name: visionspec-qc
     env: python
+    pythonVersion: "3.11"
     buildCommand: pip install -r requirements.txt
     startCommand: python app.py
     healthCheckPath: /health
