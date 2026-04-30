@@ -1,5 +1,5 @@
-tensorflow-cpu==2.13.0
-keras==2.13.0
+tensorflow
+keras
 numpy>=1.23.0
 opencv-python>=4.7.0
 matplotlib>=3.7.0
