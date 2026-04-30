@@ -89,8 +89,9 @@ def _validate_image(file) -> bool:
 def _read_image_from_request(file) -> np.ndarray:
     """Read uploaded file → numpy array (1, 224, 224, 3) float32."""
     pil_img = Image.open(file.stream).convert("RGB")
-    img     = np.array(pil_img, dtype=np.float32)
-    img     = cv2.resize(img, IMG_SIZE) / 255.0
+    img     = np.array(pil_img, dtype=np.uint8)  # Keep as uint8 first
+    img     = cv2.resize(img, IMG_SIZE)
+    img     = img.astype(np.float32) / 255.0  # Now normalize
     return np.expand_dims(img, axis=0)
 
 def _save_upload(file) -> Path:

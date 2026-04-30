@@ -778,6 +778,7 @@ footer span { color: var(--cyan); }
   <span>Production-Grade AI</span>
 </footer>
 
+<script src="config.js"></script>
 <script>
 // ─── State ────────────────────────────────────────────────────────────
 const state = {
@@ -788,7 +789,7 @@ const state = {
   defects    : 0,
 };
 
-const API_BASE = window.location.origin;   // Flask serves same origin
+const API_BASE = window.API_BASE || window.location.origin;   // Flask serves same origin
 
 // ─── DOM refs ─────────────────────────────────────────────────────────
 const uploadZone   = document.getElementById("uploadZone");

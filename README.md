@@ -97,6 +97,33 @@ Open **http://localhost:5000** in your browser → full UI loads.
 | `POST` | `/heatmap` | Heatmap only (PNG) |
 | `POST` | `/stream_predict` | Batch (up to 5 images) |
 
+## 🚀 Deployment
+
+### Backend on Render
+1. Connect this repository to Render.
+2. Render will use `render.yaml` to provision the Flask web service.
+3. The backend starts with:
+
+```bash
+python app.py
+```
+
+4. Use `/health` for health checks.
+
+### Frontend on Vercel
+1. Create a new Vercel project from this repository.
+2. Use the root repo config; Vercel will route requests to the `frontend/` folder via `vercel.json`.
+3. Update `frontend/config.js` with your Render backend URL:
+
+```js
+window.API_BASE = window.API_BASE || "https://YOUR-RENDER-SERVICE.onrender.com";
+```
+
+4. Deploy the frontend and confirm the app loads from `/`.
+
+### Local development
+If you run locally, the UI will use `window.location.origin` and talk to `http://localhost:5000`.
+
 ### Example: cURL
 
 ```bash

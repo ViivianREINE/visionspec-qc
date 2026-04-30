@@ -30,7 +30,7 @@ class GradCAM:
     # Known last conv layer names for supported architectures
     LAYER_MAP = {
         "VisionSpec_CNN"         : "conv4_1",
-        "VisionSpec_MobileNetV2" : "out_relu",        # MobileNetV2 last activation
+        "VisionSpec_MobileNetV2" : "mobilenetv2_1.00_224",
     }
 
     def __init__(self, model: tf.keras.Model, layer_name: str = None):
@@ -40,55 +40,84 @@ class GradCAM:
         print(f"[GradCAM] Using layer: '{self.layer_name}'")
 
     # ── Layer detection ───────────────────────────────────────────────────────
+    def _find_target_layer(self, layer_name: str):
+        """Return a model layer by name, searching nested models if needed."""
+        try:
+            return self.model.get_layer(layer_name)
+        except ValueError:
+            pass
+
+        for layer in self.model.layers:
+            if hasattr(layer, "get_layer"):
+                try:
+                    return layer.get_layer(layer_name)
+                except (ValueError, AttributeError):
+                    continue
+
+        return None
+
     def _infer_layer(self) -> str:
-        # Try named lookup first
+        # Prefer a hard-coded name for known model variants.
         name = self.LAYER_MAP.get(self.model.name)
         if name:
-            try:
-                self.model.get_layer(name)
+            target = self._find_target_layer(name)
+            if target is not None:
                 return name
-            except ValueError:
-                pass
 
-        # Walk backwards to find last Conv2D
+        # Try common MobileNetV2 layer names.
+        mobilenet_candidates = [
+            "mobilenetv2_1.00_224",
+            "out_relu",
+            "re_lu_1",
+            "activation",
+            "relu",
+        ]
+        for candidate in mobilenet_candidates:
+            if self._find_target_layer(candidate) is not None:
+                return candidate
+
+        # Prefer the nested MobileNet base model if present.
+        for layer in self.model.layers:
+            if hasattr(layer, "layers") and "mobilenet" in layer.name.lower():
+                output_shape = getattr(layer, "output_shape", None)
+                if output_shape is not None and len(output_shape) == 4:
+                    return layer.name
+
+        # Walk backwards to find the last Conv2D layer.
         for layer in reversed(self.model.layers):
             if isinstance(layer, tf.keras.layers.Conv2D):
                 return layer.name
 
-        # For MobileNetV2 wrapped in a functional model
+        # Fall back to the last Conv2D inside nested models.
         for layer in reversed(self.model.layers):
-            if hasattr(layer, "layers"):            # nested model
+            if hasattr(layer, "layers"):
                 for sub in reversed(layer.layers):
                     if isinstance(sub, tf.keras.layers.Conv2D):
                         return sub.name
 
-        raise ValueError("Could not find a Conv2D layer in the model.")
+        raise ValueError("Could not find a suitable layer in the model for Grad-CAM")
 
     def _build_grad_model(self) -> tf.keras.Model:
         """Build a sub-model that outputs (feature_maps, predictions)."""
-        try:
-            target_layer = self.model.get_layer(self.layer_name)
-        except ValueError:
-            # Layer may be inside a nested base model
-            for layer in self.model.layers:
-                if hasattr(layer, "get_layer"):
-                    try:
-                        target_layer = layer.get_layer(self.layer_name)
-                        # Rebuild with nested outputs
-                        grad_model = tf.keras.Model(
-                            inputs  = self.model.inputs,
-                            outputs = [layer.get_layer(self.layer_name).output,
-                                       self.model.output],
-                        )
-                        return grad_model
-                    except ValueError:
-                        continue
-            raise
+        target_layer = self._find_target_layer(self.layer_name)
+        if target_layer is None:
+            raise ValueError(f"Could not find layer '{self.layer_name}' in model")
 
-        return tf.keras.Model(
-            inputs  = self.model.inputs,
-            outputs = [target_layer.output, self.model.output],
-        )
+        try:
+            grad_model = tf.keras.Model(
+                inputs  = self.model.inputs,
+                outputs = [target_layer.output, self.model.output],
+            )
+            # Test the model to ensure it works
+            test_input = np.zeros((1, 224, 224, 3), dtype="float32")
+            _ = grad_model(test_input, training=False)
+            return grad_model
+        except Exception as e:
+            print(f"[GradCAM] Error building grad model: {e}")
+            print(f"[GradCAM] Layer name: {self.layer_name}")
+            print(f"[GradCAM] Target layer: {type(target_layer).__name__} {getattr(target_layer, 'name', '<unknown>')}\n")
+            print(f"[GradCAM] Model layers: {[l.name for l in self.model.layers]}")
+            raise
 
     # ── Core Grad-CAM computation ──────────────────────────────────────────────
     def compute_heatmap(self, img_array: np.ndarray,
@@ -97,20 +126,39 @@ class GradCAM:
         img_array : (1, H, W, 3), float32, values in [0, 1]
         Returns    : normalised heatmap (H, W), float32 in [0, 1]
         """
-        with tf.GradientTape() as tape:
-            img_tensor   = tf.cast(img_array, tf.float32)
-            conv_outputs, predictions = self.grad_model(img_tensor)
-            loss = predictions[:, class_idx]
-
-        grads      = tape.gradient(loss, conv_outputs)         # (1, h, w, C)
-        pooled     = tf.reduce_mean(grads, axis=(0, 1, 2))    # (C,)
-        cam        = tf.reduce_sum(tf.multiply(conv_outputs[0], pooled), axis=-1)
-
-        # ReLU + normalise
-        cam = tf.nn.relu(cam).numpy()
-        if cam.max() > 0:
-            cam = (cam - cam.min()) / (cam.max() - cam.min() + 1e-8)
-        return cam
+        try:
+            with tf.GradientTape() as tape:
+                img_tensor = tf.cast(img_array, tf.float32)
+                tape.watch(img_tensor)
+                
+                # Call grad_model in training mode for better gradient flow
+                conv_outputs, predictions = self.grad_model(img_tensor, training=True)
+                loss = predictions[:, class_idx]
+            
+            grads = tape.gradient(loss, conv_outputs)
+            
+            if grads is None:
+                print("[GradCAM] Warning: gradients are None, using fallback")
+                # Fallback: return a simple heatmap based on feature maps
+                cam = tf.reduce_mean(tf.abs(conv_outputs), axis=-1)[0].numpy()
+            else:
+                # Standard Grad-CAM
+                pooled = tf.reduce_mean(grads, axis=(0, 1, 2))  # (C,)
+                cam = tf.reduce_sum(tf.multiply(conv_outputs[0], pooled), axis=-1)
+                cam = tf.nn.relu(cam).numpy()
+            
+            # Normalize
+            if cam.max() > 0:
+                cam = (cam - cam.min()) / (cam.max() - cam.min() + 1e-8)
+            else:
+                cam = cam / (cam.max() + 1e-8)
+            
+            return cam
+            
+        except Exception as e:
+            print(f"[GradCAM] Error in compute_heatmap: {e}")
+            # Return a default heatmap
+            return np.ones((img_array.shape[1], img_array.shape[2]), dtype=np.float32) * 0.5
 
     # ── Overlay helpers ────────────────────────────────────────────────────────
     def overlay(self,

@@ -1,0 +1,12 @@
+venv/
+data/
+logs/
+models/
+__pycache__/
+*.pyc
+*.pyd
+*.dll
+*.rar
+*.so
+Concrete Crack Images for Classification/
+
